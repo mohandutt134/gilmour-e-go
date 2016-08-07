@@ -1,46 +1,67 @@
 package main
 
 import (
-	"fmt"
-	"sync"
-
-	G "gopkg.in/gilmour-libs/gilmour-e-go.v4"
-	"gopkg.in/gilmour-libs/gilmour-e-go.v4/backends"
+	"../../backends"
+	G "github.com/gilmour-libs/gilmour-e-go"
+	"log"
+	"time"
 )
 
-func echoEngine() *G.Gilmour {
-	redis := backends.MakeRedis("127.0.0.1:6379", "")
+func echoEngine(master string, sentinels []string) *G.Gilmour {
+	redis := backends.MakeRedisSentinel(master, "", sentinels)
 	engine := G.Get(redis)
 	return engine
 }
 
-func echoRequest(wg *sync.WaitGroup, engine *G.Gilmour, msg string) {
-	req := engine.NewRequest("echo")
-	resp, err := req.Execute(G.NewMessage().SetData(msg))
-	if err != nil {
-		fmt.Println("Echoclient: error", err.Error())
-	}
+// func ExecuteRequest(request *G.RequestComposer, c chan int, count int) {
+// 	req_msg := G.NewMessage()
+// 	resp, err := request.Execute(req_msg)
 
-	defer wg.Done()
+// 	if resp == nil {
+// 		log.Println("nil response due to ", err)
+// 	}
 
-	var output string
-	if err := resp.Next().GetData(&output); err != nil {
-		fmt.Println("Echoclient: error", err.Error())
-	} else {
-		fmt.Println("Echoclient: received", output)
-	}
-}
+// 	msg := resp.Next()
+
+// 	var data string
+// 	msg.GetData(&data)
+// 	log.Println(data)
+// 	c <- 1
+// }
 
 func main() {
-	engine := echoEngine()
+	sentinels := []string{":16380", ":16381", ":16382"}
+	engine := echoEngine("mymaster", sentinels)
 	engine.Start()
 
-	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go echoRequest(&wg, engine, fmt.Sprintf("Hello: %v", i))
-	}
+	request := engine.NewRequest("test.handler.one")
+	c := make(chan int)
+	total := 0
 
-	wg.Wait()
-	engine.Stop()
+	final := time.Now().Add(2 * time.Second)
+	for i := 0; time.Now().Before(final); i += 2 {
+		// 	go ExecuteRequest(request, c, i)
+		go func() {
+			req_msg := G.NewMessage()
+			resp, err := request.Execute(req_msg)
+
+			if resp == nil {
+				log.Println("nil response due to ", err)
+			} else {
+
+				msg := resp.Next()
+
+				var data string
+				msg.GetData(&data)
+				log.Println(data)
+			}
+		}()
+		select {
+		case count := <-c:
+			total += count
+		default:
+			total = total
+		}
+	}
+	log.Println("Total throughput = ", total, " per second")
 }

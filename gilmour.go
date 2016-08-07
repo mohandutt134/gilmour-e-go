@@ -3,6 +3,7 @@ package gilmour
 import (
 	"errors"
 	"fmt"
+	"net"
 	"runtime"
 	"strings"
 	"sync"
@@ -25,6 +26,11 @@ func Get(backend Backend) *Gilmour {
 	return &x
 }
 
+type RetryConf struct {
+	Timeout    time.Duration
+	CheckEvery time.Duration
+}
+
 type Gilmour struct {
 	enableHealthCheck bool
 	identMutex        sync.RWMutex
@@ -33,6 +39,19 @@ type Gilmour struct {
 	ident             string
 	errorPolicy       string
 	subscriber        subscriber
+	retryLimit        int
+	retryConf         RetryConf
+}
+
+func (g *Gilmour) EnableRetry(conf RetryConf) {
+	g.retryConf = conf
+
+	if RetryConf.CheckEvery == 0 {
+		g.retryConf.CheckEvery = RetryConf.Timeout / 8
+		g.retryLimit = 8
+	} else {
+		g.retryLimit = RetryConf.Timeout / RetryConf.CheckEvery
+	}
 }
 
 // Start the Gilmour engine. Creates a bi-directional channel; sent to both
@@ -370,7 +389,14 @@ func (g *Gilmour) ReplyTo(topic string, h RequestHandler, opts *HandlerOpts) (*S
 		h(req, resp)
 	}
 
-	return g.subscribe(g.requestDestination(topic), handler, opts)
+	resp, err := g.subscribe(g.requestDestination(topic), handler, opts)
+
+	if err, ok := err.(net.Error); ok {
+		fmt.Println("network error:", err)
+	} else {
+		fmt.Println("other error:", err)
+	}
+	return resp, err
 }
 
 //Unsubscribe Previously registered Reply to.
