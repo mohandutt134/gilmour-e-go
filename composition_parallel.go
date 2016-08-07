@@ -1,6 +1,9 @@
 package gilmour
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 //New Parallel composition
 func (g *Gilmour) NewParallel(cmds ...Executable) *ParallelComposition {
@@ -27,7 +30,18 @@ func (c *ParallelComposition) Execute(m *Message) (*Response, error) {
 
 		go func(cmd Executable, w *sync.WaitGroup) {
 			defer w.Done()
-			response, _ := performJob(cmd, m)
+
+			var response *Response
+
+			try(func(attempt int) (bool, error) {
+				var err error
+				response, err = performJob(cmd, m)
+				if err != nil {
+					time.Sleep(c.engine.retryConf.Frequency)
+				}
+				return attempt < c.engine.retryConf.retryLimit, err
+			})
+
 			response = inflateResponse(response)
 			f.write(response.Next())
 		}(cmd, &wg)

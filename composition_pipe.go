@@ -1,5 +1,7 @@
 package gilmour
 
+import "time"
+
 type PipeComposition struct {
 	composition
 }
@@ -7,7 +9,15 @@ type PipeComposition struct {
 func (c *PipeComposition) Execute(m *Message) (resp *Response, err error) {
 	do := func(do recfunc, m *Message) {
 		cmd := c.lpop()
-		resp, err = performJob(cmd, m)
+
+		err = try(func(attempt int) (bool, error) {
+			var err error
+			resp, err = performJob(cmd, m)
+			if err != nil {
+				time.Sleep(c.engine.retryConf.Frequency)
+			}
+			return attempt < c.engine.retryConf.retryLimit, err
+		})
 
 		if len(c.executables()) > 0 && resp.Code() == 200 && err == nil {
 			resp = inflateResponse(resp)

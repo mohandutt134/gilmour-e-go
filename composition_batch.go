@@ -1,5 +1,7 @@
 package gilmour
 
+import "time"
+
 //New Batch composition
 func (g *Gilmour) NewBatch(cmds ...Executable) *BatchComposition {
 	c := new(BatchComposition)
@@ -17,7 +19,15 @@ func (c *BatchComposition) Execute(m *Message) (resp *Response, err error) {
 
 	do := func(do recfunc, m *Message) {
 		cmd := c.lpop()
-		resp, err = performJob(cmd, m)
+
+		err = try(func(attempt int) (bool, error) {
+			var err error
+			resp, err = performJob(cmd, m)
+			if err != nil {
+				time.Sleep(c.engine.retryConf.Frequency)
+			}
+			return attempt < c.engine.retryConf.retryLimit, err
+		})
 
 		// Inflate and record the output in a single response.
 		if c.isRecorded() {

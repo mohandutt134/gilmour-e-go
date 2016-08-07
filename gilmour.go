@@ -28,7 +28,8 @@ func Get(backend Backend) *Gilmour {
 
 type RetryConf struct {
 	Timeout    time.Duration
-	CheckEvery time.Duration
+	Frequency  time.Duration
+	retryLimit int
 }
 
 type Gilmour struct {
@@ -39,18 +40,17 @@ type Gilmour struct {
 	ident             string
 	errorPolicy       string
 	subscriber        subscriber
-	retryLimit        int
 	retryConf         RetryConf
 }
 
 func (g *Gilmour) EnableRetry(conf RetryConf) {
 	g.retryConf = conf
 
-	if conf.CheckEvery == 0 {
-		g.retryConf.CheckEvery = conf.Timeout / 8
-		g.retryLimit = 8
+	if conf.Frequency == 0 {
+		g.retryConf.Frequency = conf.Timeout / 8
+		g.retryConf.retryLimit = 8
 	} else {
-		g.retryLimit = int(conf.Timeout) / int(conf.CheckEvery)
+		g.retryConf.retryLimit = int(conf.Timeout) / int(conf.Frequency)
 	}
 }
 
@@ -307,7 +307,14 @@ func (g *Gilmour) unsubscribe(topic string, s *Subscription) {
 	g.removeSubscriber(topic, s)
 
 	if _, ok := g.getSubscribers(topic); !ok {
-		err := g.backend.Unsubscribe(topic)
+		err := try(func(attempt int) (bool, error) {
+			var err error
+			if err = g.backend.Unsubscribe(topic); err != nil {
+				time.Sleep(g.retryConf.Frequency)
+			}
+			return attempt < g.retryConf.retryLimit, err
+		})
+
 		if err != nil {
 			panic(err)
 		}
@@ -389,21 +396,16 @@ func (g *Gilmour) ReplyTo(topic string, h RequestHandler, opts *HandlerOpts) (*S
 		h(req, resp)
 	}
 
-	var err error
-	for try := 0; try <= g.retryLimit; try += 1 {
-		resp, err := g.subscribe(g.requestDestination(topic), handler, opts)
-
+	var resp *Subscription
+	err := try(func(attempt int) (bool, error) {
+		var err error
+		resp, err = g.subscribe(g.requestDestination(topic), handler, opts)
 		if err != nil {
-			if err, ok := err.(net.Error); ok {
-				time.Sleep(g.retryConf.CheckEvery)
-			} else {
-				return resp, err
-			}
-		} else {
-			return resp, err
+			time.Sleep(g.retryConf.Frequency)
 		}
-	}
-	return nil, err
+		return attempt < g.retryConf.retryLimit, err
+	})
+	return resp, err
 }
 
 //Unsubscribe Previously registered Reply to.
@@ -466,7 +468,16 @@ func (g *Gilmour) Slot(topic string, h SlotHandler, opts *HandlerOpts) (*Subscri
 		h(req)
 	}
 
-	return g.subscribe(g.slotDestination(topic), handler, opts)
+	var resp *Subscription
+	err := try(func(attempt int) (bool, error) {
+		var err error
+		resp, err = g.subscribe(g.requestDestination(topic), handler, opts)
+		if err != nil {
+			time.Sleep(g.retryConf.Frequency)
+		}
+		return attempt < g.retryConf.retryLimit, err
+	})
+	return resp, err
 }
 
 func (g *Gilmour) UnsubscribeSlot(topic string, s *Subscription) {
@@ -481,7 +492,15 @@ func (g *Gilmour) Signal(topic string, msg *Message) (sender string, err error) 
 
 	sender = makeSenderId()
 	msg.setSender(sender)
-	return sender, g.publish(g.slotDestination(topic), msg)
+
+	err = try(func(attempt int) (bool, error) {
+		var err error
+		if err = g.publish(g.slotDestination(topic), msg); err != nil {
+			time.Sleep(g.retryConf.Frequency)
+		}
+		return attempt < g.retryConf.retryLimit, err
+	})
+	return sender, err
 }
 
 // Internal method to publish a message.
@@ -507,4 +526,27 @@ func (g *Gilmour) publish(topic string, msg *Message) error {
 	}
 
 	return g.backend.Publish(topic, msg)
+}
+
+func isNetworkError(err error) bool {
+	if _, ok := err.(net.Error); ok {
+		return true
+	} else {
+		return false
+	}
+}
+
+func try(fn func(attempt int) (retry bool, err error)) error {
+	var err error
+	var cont bool
+	attempt := 0
+	for {
+		fmt.Println(attempt)
+		cont, err = fn(attempt)
+		if !isNetworkError(err) || !cont || err == nil {
+			break
+		}
+		attempt++
+	}
+	return err
 }

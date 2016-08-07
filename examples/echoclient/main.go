@@ -2,7 +2,8 @@ package main
 
 import (
 	"../../backends"
-	G "github.com/gilmour-libs/gilmour-e-go"
+	// G "github.com/gilmour-libs/gilmour-e-go"
+	G "../../"
 	"log"
 	"time"
 )
@@ -32,30 +33,34 @@ func echoEngine(master string, sentinels []string) *G.Gilmour {
 func main() {
 	sentinels := []string{":16380", ":16381", ":16382"}
 	engine := echoEngine("mymaster", sentinels)
+	engine.EnableRetry(G.RetryConf{
+		Timeout:   10 * time.Second,        // in seconds
+		Frequency: 1000 * time.Millisecond, // in milliseconds
+	})
 	engine.Start()
 
 	request := engine.NewRequest("test.handler.one")
 	c := make(chan int)
 	total := 0
 
-	final := time.Now().Add(2 * time.Second)
-	for i := 0; time.Now().Before(final); i += 2 {
+	final := time.Now().Add(20 * time.Second)
+	for i := 0; time.Now().Before(final); i += 1 {
 		// 	go ExecuteRequest(request, c, i)
-		go func() {
-			req_msg := G.NewMessage()
-			resp, err := request.Execute(req_msg)
+		// go func() {
+		req_msg := G.NewMessage()
+		resp, err := request.Execute(req_msg)
 
-			if resp == nil {
-				log.Println("nil response due to ", err)
-			} else {
+		if resp == nil {
+			log.Println("nil response due to ", err)
+		} else {
 
-				msg := resp.Next()
+			msg := resp.Next()
 
-				var data string
-				msg.GetData(&data)
-				log.Println(data)
-			}
-		}()
+			var data string
+			msg.GetData(&data)
+			log.Println(data)
+		}
+		// }()
 		select {
 		case count := <-c:
 			total += count

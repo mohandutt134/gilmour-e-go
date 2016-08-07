@@ -1,5 +1,7 @@
 package gilmour
 
+import "time"
+
 type Request struct {
 	topic string
 	gData *Message
@@ -77,5 +79,16 @@ func (rc *RequestComposer) Execute(m *Message) (*Response, error) {
 		}
 	}
 
-	return rc.engine.request(rc.topic, m, rc.opts)
+	var resp *Response
+
+	err := try(func(attempt int) (bool, error) {
+		var err error
+		resp, err = rc.engine.request(rc.topic, m, rc.opts)
+		if err != nil {
+			time.Sleep(rc.engine.retryConf.Frequency)
+		}
+		return attempt < rc.engine.retryConf.retryLimit, err
+	})
+
+	return resp, err
 }

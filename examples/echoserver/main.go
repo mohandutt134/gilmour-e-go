@@ -7,16 +7,16 @@ import (
 	G "../../"
 	"log"
 	"sync"
-	"time"
+	// "time"
 )
 
 func echoEngine(master string, sentinels []string) *G.Gilmour {
 	redis := backends.MakeRedisSentinel(master, "", sentinels)
 	engine := G.Get(redis)
-	engine.EnableRetry(G.RetryConf{
-		Timeout:    5 * time.Second,        // in seconds
-		CheckEvery: 100 * time.Millisecond, // in milliseconds
-	})
+	// engine.EnableRetry(G.RetryConf{
+	// 	Timeout:   5 * time.Second,        // in seconds
+	// 	Frequency: 100 * time.Millisecond, // in milliseconds
+	// })
 	return engine
 }
 
