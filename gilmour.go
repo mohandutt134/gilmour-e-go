@@ -46,11 +46,11 @@ type Gilmour struct {
 func (g *Gilmour) EnableRetry(conf RetryConf) {
 	g.retryConf = conf
 
-	if RetryConf.CheckEvery == 0 {
-		g.retryConf.CheckEvery = RetryConf.Timeout / 8
+	if conf.CheckEvery == 0 {
+		g.retryConf.CheckEvery = conf.Timeout / 8
 		g.retryLimit = 8
 	} else {
-		g.retryLimit = RetryConf.Timeout / RetryConf.CheckEvery
+		g.retryLimit = int(conf.Timeout) / int(conf.CheckEvery)
 	}
 }
 
@@ -389,14 +389,21 @@ func (g *Gilmour) ReplyTo(topic string, h RequestHandler, opts *HandlerOpts) (*S
 		h(req, resp)
 	}
 
-	resp, err := g.subscribe(g.requestDestination(topic), handler, opts)
+	var err error
+	for try := 0; try <= g.retryLimit; try += 1 {
+		resp, err := g.subscribe(g.requestDestination(topic), handler, opts)
 
-	if err, ok := err.(net.Error); ok {
-		fmt.Println("network error:", err)
-	} else {
-		fmt.Println("other error:", err)
+		if err != nil {
+			if err, ok := err.(net.Error); ok {
+				time.Sleep(g.retryConf.CheckEvery)
+			} else {
+				return resp, err
+			}
+		} else {
+			return resp, err
+		}
 	}
-	return resp, err
+	return nil, err
 }
 
 //Unsubscribe Previously registered Reply to.
