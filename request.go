@@ -77,7 +77,7 @@ func (rc *RequestComposer) Execute(m *Message) (resp *Response, err error) {
 		}
 	}
 
-	err = try(rc.engine, func() (err error) {
+	err = try(rc.engine.retryConf, func() (err error) {
 		resp, err = rc.engine.request(rc.topic, m, rc.opts)
 		return
 	})

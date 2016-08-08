@@ -30,7 +30,7 @@ func (c *ParallelComposition) Execute(m *Message) (*Response, error) {
 
 			var response *Response
 
-			try(c.engine, func() (err error) {
+			try(c.engine.retryConf, func() (err error) {
 				response, err = performJob(cmd, m)
 				return
 			})

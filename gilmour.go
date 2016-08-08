@@ -303,7 +303,7 @@ func (g *Gilmour) unsubscribe(topic string, s *Subscription) {
 	g.removeSubscriber(topic, s)
 
 	if _, ok := g.getSubscribers(topic); !ok {
-		err := try(g, func() error {
+		err := try(g.retryConf, func() error {
 			return g.backend.Unsubscribe(topic)
 		})
 
@@ -389,7 +389,7 @@ func (g *Gilmour) ReplyTo(topic string, h RequestHandler, opts *HandlerOpts) (*S
 	}
 
 	var resp *Subscription
-	err := try(g, func() (err error) {
+	err := try(g.retryConf, func() (err error) {
 		resp, err = g.subscribe(g.requestDestination(topic), handler, opts)
 		return
 	})
@@ -458,7 +458,7 @@ func (g *Gilmour) Slot(topic string, h SlotHandler, opts *HandlerOpts) (*Subscri
 	}
 
 	var resp *Subscription
-	err := try(g, func() (err error) {
+	err := try(g.retryConf, func() (err error) {
 		resp, err = g.subscribe(g.requestDestination(topic), handler, opts)
 		return
 	})
@@ -479,7 +479,7 @@ func (g *Gilmour) Signal(topic string, msg *Message) (sender string, err error) 
 	sender = makeSenderId()
 	msg.setSender(sender)
 
-	err = try(g, func() error {
+	err = try(g.retryConf, func() error {
 		return g.publish(g.slotDestination(topic), msg)
 	})
 
@@ -519,19 +519,19 @@ func isNetworkError(err error) bool {
 	}
 }
 
-func isExpired(g *Gilmour, startTime time.Time) bool {
-	return time.Now().After(startTime.Add(g.retryConf.Timeout))
+func isExpired(timeout time.Duration, startTime time.Time) bool {
+	return time.Now().After(startTime.Add(timeout))
 }
 
-func try(g *Gilmour, fn func() error) (err error) {
+func try(r RetryConf, fn func() error) (err error) {
 	startTime := time.Now()
 	for {
 		err = fn()
-		if isExpired(g, startTime) || !isNetworkError(err) || err == nil {
+		if isExpired(r.Timeout, startTime) || !isNetworkError(err) || err == nil {
 			break
 		}
-		if g.retryConf.Frequency > 0 {
-			time.Sleep(g.retryConf.Frequency)
+		if r.Frequency > 0 {
+			time.Sleep(r.Frequency)
 		}
 	}
 	return
