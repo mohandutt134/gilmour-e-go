@@ -1,7 +1,6 @@
 package gilmour
 
 import (
-	"./backends"
 	"fmt"
 	"log"
 	"math/rand"
@@ -10,7 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
-	// "gopkg.in/gilmour-libs/gilmour/backends"
+
+	"gopkg.in/gilmour-libs/gilmour-e-go.v4/backends"
 	"gopkg.in/gilmour-libs/gilmour-e-go.v4/ui"
 )
 
@@ -22,10 +22,7 @@ const (
 
 var engine *Gilmour
 
-var redis = backends.MakeRedis("127.0.0.1:6380", "")
-
-// var sentinels = []string{":16380", ":16381", ":16382"}
-// var redis = backends.MakeRedisSentinel("mymaster", "", sentinels)
+var redis = backends.MakeRedis("127.0.0.1:6379", "")
 
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 

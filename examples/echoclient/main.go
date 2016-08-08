@@ -1,72 +1,46 @@
 package main
 
 import (
-	"../../backends"
-	// G "github.com/gilmour-libs/gilmour-e-go"
-	G "../../"
-	"log"
-	"time"
+	"fmt"
+	"sync"
+
+	G "gopkg.in/gilmour-libs/gilmour-e-go.v4"
+	"gopkg.in/gilmour-libs/gilmour-e-go.v4/backends"
 )
 
-func echoEngine(master string, sentinels []string) *G.Gilmour {
-	redis := backends.MakeRedisSentinel(master, "", sentinels)
+func echoEngine() *G.Gilmour {
+	redis := backends.MakeRedis("127.0.0.1:6379", "")
 	engine := G.Get(redis)
 	return engine
 }
 
-// func ExecuteRequest(request *G.RequestComposer, c chan int, count int) {
-// 	req_msg := G.NewMessage()
-// 	resp, err := request.Execute(req_msg)
+func echoRequest(wg *sync.WaitGroup, engine *G.Gilmour, msg string) {
+	req := engine.NewRequest("echo")
+	resp, err := req.Execute(G.NewMessage().SetData(msg))
+	if err != nil {
+		fmt.Println("Echoclient: error", err.Error())
+	}
 
-// 	if resp == nil {
-// 		log.Println("nil response due to ", err)
-// 	}
+	defer wg.Done()
 
-// 	msg := resp.Next()
-
-// 	var data string
-// 	msg.GetData(&data)
-// 	log.Println(data)
-// 	c <- 1
-// }
+	var output string
+	if err := resp.Next().GetData(&output); err != nil {
+		fmt.Println("Echoclient: error", err.Error())
+	} else {
+		fmt.Println("Echoclient: received", output)
+	}
+}
 
 func main() {
-	sentinels := []string{":16380", ":16381", ":16382"}
-	engine := echoEngine("mymaster", sentinels)
-	engine.EnableRetry(G.RetryConf{
-		Timeout:   10 * time.Second,        // in seconds
-		Frequency: 1000 * time.Millisecond, // in milliseconds
-	})
+	engine := echoEngine()
 	engine.Start()
 
-	request := engine.NewRequest("test.handler.one")
-	c := make(chan int)
-	total := 0
-
-	final := time.Now().Add(20 * time.Second)
-	for i := 0; time.Now().Before(final); i += 1 {
-		// 	go ExecuteRequest(request, c, i)
-		// go func() {
-		req_msg := G.NewMessage()
-		resp, err := request.Execute(req_msg)
-
-		if resp == nil {
-			log.Println("nil response due to ", err)
-		} else {
-
-			msg := resp.Next()
-
-			var data string
-			msg.GetData(&data)
-			log.Println(data)
-		}
-		// }()
-		select {
-		case count := <-c:
-			total += count
-		default:
-			total = total
-		}
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go echoRequest(&wg, engine, fmt.Sprintf("Hello: %v", i))
 	}
-	log.Println("Total throughput = ", total, " per second")
+
+	wg.Wait()
+	engine.Stop()
 }
