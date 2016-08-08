@@ -459,7 +459,7 @@ func (g *Gilmour) Slot(topic string, h SlotHandler, opts *HandlerOpts) (*Subscri
 
 	var resp *Subscription
 	err := try(g.retryConf, func() (err error) {
-		resp, err = g.subscribe(g.requestDestination(topic), handler, opts)
+		resp, err = g.subscribe(g.slotDestination(topic), handler, opts)
 		return
 	})
 
