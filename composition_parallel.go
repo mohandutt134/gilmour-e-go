@@ -28,12 +28,7 @@ func (c *ParallelComposition) Execute(m *Message) (*Response, error) {
 		go func(cmd Executable, w *sync.WaitGroup) {
 			defer w.Done()
 
-			var response *Response
-
-			try(c.engine.retryConf, func() (err error) {
-				response, err = performJob(cmd, m)
-				return
-			})
+			response, _ := performJob(cmd, m, c.engine.retryConf)
 
 			response = inflateResponse(response)
 			f.write(response.Next())

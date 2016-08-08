@@ -27,8 +27,8 @@ func Get(backend Backend) *Gilmour {
 }
 
 type RetryConf struct {
-	Timeout   time.Duration
-	Frequency time.Duration
+	Timeout  time.Duration
+	Interval time.Duration
 }
 
 type Gilmour struct {
@@ -45,8 +45,8 @@ type Gilmour struct {
 func (g *Gilmour) EnableRetry(conf RetryConf) {
 	g.retryConf = conf
 
-	if conf.Frequency == 0 {
-		g.retryConf.Frequency = conf.Timeout / 8
+	if conf.Interval == 0 {
+		g.retryConf.Interval = conf.Timeout / 8
 	}
 }
 
@@ -530,8 +530,8 @@ func try(r RetryConf, fn func() error) (err error) {
 		if isExpired(r.Timeout, startTime) || !isNetworkError(err) || err == nil {
 			break
 		}
-		if r.Frequency > 0 {
-			time.Sleep(r.Frequency)
+		if r.Interval > 0 {
+			time.Sleep(r.Interval)
 		}
 	}
 	return

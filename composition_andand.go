@@ -16,10 +16,7 @@ func (c *AndAndComposition) Execute(m *Message) (resp *Response, err error) {
 	do := func(do recfunc, m *Message) {
 		cmd := c.lpop()
 
-		err = try(c.engine.retryConf, func() (err error) {
-			resp, err = performJob(cmd, m)
-			return
-		})
+		resp, err = performJob(cmd, m, c.engine.retryConf)
 
 		// Keep going if nothing has failed so far.
 		if len(c.executables()) > 0 && err == nil && resp.Code() == 200 {

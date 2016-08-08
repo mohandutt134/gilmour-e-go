@@ -8,10 +8,7 @@ func (c *PipeComposition) Execute(m *Message) (resp *Response, err error) {
 	do := func(do recfunc, m *Message) {
 		cmd := c.lpop()
 
-		err = try(c.engine.retryConf, func() (err error) {
-			resp, err = performJob(cmd, m)
-			return
-		})
+		resp, err = performJob(cmd, m, c.engine.retryConf)
 
 		if len(c.executables()) > 0 && resp.Code() == 200 && err == nil {
 			resp = inflateResponse(resp)
