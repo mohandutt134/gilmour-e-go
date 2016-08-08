@@ -1,7 +1,5 @@
 package gilmour
 
-import "time"
-
 func (g *Gilmour) NewOrOr(cmds ...Executable) *OrOrComposition {
 	c := new(OrOrComposition)
 	c.setEngine(g)
@@ -17,13 +15,10 @@ func (c *OrOrComposition) Execute(m *Message) (resp *Response, err error) {
 	do := func(do recfunc, m *Message) {
 		cmd := c.lpop()
 
-		err = try(func(attempt int) (bool, error) {
+		err = try(c.engine, func() error {
 			var err error
 			resp, err = performJob(cmd, m)
-			if err != nil {
-				time.Sleep(c.engine.retryConf.Frequency)
-			}
-			return attempt < c.engine.retryConf.retryLimit, err
+			return err
 		})
 
 		// Keep going, If the Pipeline has failed so far and there are still

@@ -307,12 +307,10 @@ func (g *Gilmour) unsubscribe(topic string, s *Subscription) {
 	g.removeSubscriber(topic, s)
 
 	if _, ok := g.getSubscribers(topic); !ok {
-		err := try(func(attempt int) (bool, error) {
+		err := try(g, func() error {
 			var err error
-			if err = g.backend.Unsubscribe(topic); err != nil {
-				time.Sleep(g.retryConf.Frequency)
-			}
-			return attempt < g.retryConf.retryLimit, err
+			err = g.backend.Unsubscribe(topic)
+			return err
 		})
 
 		if err != nil {
@@ -397,14 +395,12 @@ func (g *Gilmour) ReplyTo(topic string, h RequestHandler, opts *HandlerOpts) (*S
 	}
 
 	var resp *Subscription
-	err := try(func(attempt int) (bool, error) {
+	err := try(g, func() error {
 		var err error
 		resp, err = g.subscribe(g.requestDestination(topic), handler, opts)
-		if err != nil {
-			time.Sleep(g.retryConf.Frequency)
-		}
-		return attempt < g.retryConf.retryLimit, err
+		return err
 	})
+
 	return resp, err
 }
 
@@ -469,14 +465,12 @@ func (g *Gilmour) Slot(topic string, h SlotHandler, opts *HandlerOpts) (*Subscri
 	}
 
 	var resp *Subscription
-	err := try(func(attempt int) (bool, error) {
+	err := try(g, func() error {
 		var err error
 		resp, err = g.subscribe(g.requestDestination(topic), handler, opts)
-		if err != nil {
-			time.Sleep(g.retryConf.Frequency)
-		}
-		return attempt < g.retryConf.retryLimit, err
+		return err
 	})
+
 	return resp, err
 }
 
@@ -493,13 +487,12 @@ func (g *Gilmour) Signal(topic string, msg *Message) (sender string, err error) 
 	sender = makeSenderId()
 	msg.setSender(sender)
 
-	err = try(func(attempt int) (bool, error) {
+	err = try(g, func() error {
 		var err error
-		if err = g.publish(g.slotDestination(topic), msg); err != nil {
-			time.Sleep(g.retryConf.Frequency)
-		}
-		return attempt < g.retryConf.retryLimit, err
+		err = g.publish(g.slotDestination(topic), msg)
+		return err
 	})
+
 	return sender, err
 }
 
@@ -536,15 +529,20 @@ func isNetworkError(err error) bool {
 	}
 }
 
-func try(fn func(attempt int) (retry bool, err error)) error {
+func isExpired(g *Gilmour, attempt int) bool {
+	return attempt >= g.retryConf.retryLimit
+}
+
+func try(g *Gilmour, fn func() (err error)) error {
 	var err error
-	var cont bool
 	attempt := 0
 	for {
-		fmt.Println(attempt)
-		cont, err = fn(attempt)
-		if !isNetworkError(err) || !cont || err == nil {
+		err = fn()
+		if isExpired(g, attempt) || !isNetworkError(err) || err == nil {
 			break
+		}
+		if g.retryConf.Frequency > 0 {
+			time.Sleep(g.retryConf.Frequency)
 		}
 		attempt++
 	}

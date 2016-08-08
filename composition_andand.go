@@ -1,7 +1,5 @@
 package gilmour
 
-import "time"
-
 //New AndAnd composition.
 func (g *Gilmour) NewAndAnd(cmds ...Executable) *AndAndComposition {
 	c := new(AndAndComposition)
@@ -18,13 +16,10 @@ func (c *AndAndComposition) Execute(m *Message) (resp *Response, err error) {
 	do := func(do recfunc, m *Message) {
 		cmd := c.lpop()
 
-		err = try(func(attempt int) (bool, error) {
+		err = try(c.engine, func() error {
 			var err error
 			resp, err = performJob(cmd, m)
-			if err != nil {
-				time.Sleep(c.engine.retryConf.Frequency)
-			}
-			return attempt < c.engine.retryConf.retryLimit, err
+			return err
 		})
 
 		// Keep going if nothing has failed so far.

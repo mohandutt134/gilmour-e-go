@@ -1,7 +1,5 @@
 package gilmour
 
-import "time"
-
 type Request struct {
 	topic string
 	gData *Message
@@ -72,23 +70,18 @@ func (rc *RequestComposer) With(t interface{}) *RequestComposer {
 	return rc
 }
 
-func (rc *RequestComposer) Execute(m *Message) (*Response, error) {
+func (rc *RequestComposer) Execute(m *Message) (resp *Response, err error) {
 	if rc.message != nil {
 		if err := compositionMerge(m.rawData(), &rc.message); err != nil {
 			return nil, err
 		}
 	}
 
-	var resp *Response
-
-	err := try(func(attempt int) (bool, error) {
+	err = try(rc.engine, func() error {
 		var err error
 		resp, err = rc.engine.request(rc.topic, m, rc.opts)
-		if err != nil {
-			time.Sleep(rc.engine.retryConf.Frequency)
-		}
-		return attempt < rc.engine.retryConf.retryLimit, err
+		return err
 	})
 
-	return resp, err
+	return
 }
