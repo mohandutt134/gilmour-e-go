@@ -47,7 +47,7 @@ func (g *Gilmour) SetRetryTimeout(t time.Duration) {
 	g.retryTimeout = t
 }
 
-func (g *Gilmour) getRetryTimeout() time.Duration {
+func (g *Gilmour) GetRetryTimeout() time.Duration {
 	return g.retryTimeout
 }
 
@@ -55,9 +55,9 @@ func (g *Gilmour) SetRetryInterval(t time.Duration) {
 	g.retryInterval = t
 }
 
-func (g *Gilmour) getRetryInterval() time.Duration {
+func (g *Gilmour) GetRetryInterval() time.Duration {
 	if g.retryInterval == 0 {
-		return g.getRetryTimeout() / 8
+		return g.GetRetryTimeout() / 8
 	}
 
 	return g.retryInterval
@@ -540,10 +540,10 @@ func try(g *Gilmour, fn func() error) (err error) {
 	startTime := time.Now()
 	for {
 		err = fn()
-		if isExpired(g.getRetryTimeout(), startTime) || !isNetworkError(err) || err == nil {
+		if isExpired(g.GetRetryTimeout(), startTime) || !isNetworkError(err) || err == nil {
 			break
 		}
-		time.Sleep(g.getRetryInterval())
+		time.Sleep(g.GetRetryInterval())
 	}
 	return
 }
