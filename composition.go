@@ -47,8 +47,8 @@ func inflateResponse(r *Response) *Response {
 	return resp
 }
 
-func performJob(cmd Executable, m *Message, conf RetryConf) (resp *Response, err error) {
-	err = try(conf, func() (err error) {
+func performJob(cmd Executable, m *Message, g *Gilmour) (resp *Response, err error) {
+	err = try(g, func() (err error) {
 		resp, err = cmd.Execute(copyMessage(m))
 		return
 	})

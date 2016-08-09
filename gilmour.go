@@ -26,7 +26,7 @@ func Get(backend Backend) *Gilmour {
 	return &x
 }
 
-type RetryConf struct {
+type retryConf struct {
 	Timeout  time.Duration
 	Interval time.Duration
 }
@@ -39,15 +39,28 @@ type Gilmour struct {
 	ident             string
 	errorPolicy       string
 	subscriber        subscriber
-	retryConf         RetryConf
+	retryTimeout      time.Duration
+	retryInterval     time.Duration
 }
 
-func (g *Gilmour) EnableRetry(conf RetryConf) {
-	g.retryConf = conf
+func (g *Gilmour) SetRetryTimeout(t time.Duration) {
+	g.retryTimeout = t
+}
 
-	if conf.Interval == 0 {
-		g.retryConf.Interval = conf.Timeout / 8
+func (g *Gilmour) getRetryTimeout() time.Duration {
+	return g.retryTimeout
+}
+
+func (g *Gilmour) SetRetryInterval(t time.Duration) {
+	g.retryInterval = t
+}
+
+func (g *Gilmour) getRetryInterval() time.Duration {
+	if g.retryInterval == 0 {
+		return g.getRetryTimeout() / 8
 	}
+
+	return g.retryInterval
 }
 
 // Start the Gilmour engine. Creates a bi-directional channel; sent to both
@@ -303,7 +316,7 @@ func (g *Gilmour) unsubscribe(topic string, s *Subscription) {
 	g.removeSubscriber(topic, s)
 
 	if _, ok := g.getSubscribers(topic); !ok {
-		err := try(g.retryConf, func() error {
+		err := try(g, func() error {
 			return g.backend.Unsubscribe(topic)
 		})
 
@@ -389,7 +402,7 @@ func (g *Gilmour) ReplyTo(topic string, h RequestHandler, opts *HandlerOpts) (*S
 	}
 
 	var resp *Subscription
-	err := try(g.retryConf, func() (err error) {
+	err := try(g, func() (err error) {
 		resp, err = g.subscribe(g.requestDestination(topic), handler, opts)
 		return
 	})
@@ -458,7 +471,7 @@ func (g *Gilmour) Slot(topic string, h SlotHandler, opts *HandlerOpts) (*Subscri
 	}
 
 	var resp *Subscription
-	err := try(g.retryConf, func() (err error) {
+	err := try(g, func() (err error) {
 		resp, err = g.subscribe(g.slotDestination(topic), handler, opts)
 		return
 	})
@@ -479,7 +492,7 @@ func (g *Gilmour) Signal(topic string, msg *Message) (sender string, err error) 
 	sender = makeSenderId()
 	msg.setSender(sender)
 
-	err = try(g.retryConf, func() error {
+	err = try(g, func() error {
 		return g.publish(g.slotDestination(topic), msg)
 	})
 
@@ -523,16 +536,14 @@ func isExpired(timeout time.Duration, startTime time.Time) bool {
 	return time.Now().After(startTime.Add(timeout))
 }
 
-func try(r RetryConf, fn func() error) (err error) {
+func try(g *Gilmour, fn func() error) (err error) {
 	startTime := time.Now()
 	for {
 		err = fn()
-		if isExpired(r.Timeout, startTime) || !isNetworkError(err) || err == nil {
+		if isExpired(g.getRetryTimeout(), startTime) || !isNetworkError(err) || err == nil {
 			break
 		}
-		if r.Interval > 0 {
-			time.Sleep(r.Interval)
-		}
+		time.Sleep(g.getRetryInterval())
 	}
 	return
 }
