@@ -8,6 +8,8 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
+var once sync.Once
+
 func newPool(server, password string) *redis.Pool {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
@@ -36,18 +38,13 @@ func newPool(server, password string) *redis.Pool {
 	}
 }
 
-var cached = struct {
-	sync.RWMutex
-	pool *redis.Pool
-}{}
+var pool *redis.Pool
 
 func getPool(redis_host, password string) *redis.Pool {
 
-	cached.Lock()
-	if cached.pool == nil {
-		cached.pool = newPool(redis_host, password)
-	}
-	cached.Unlock()
+	once.Do(func() {
+		pool = newPool(redis_host, password)
+	})
 
-	return cached.pool
+	return pool
 }
