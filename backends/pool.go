@@ -2,58 +2,36 @@ package backends
 
 import (
 	"log"
-	"sync"
-	"time"
 
-	"gopkg.in/mohandutt134/redis.v4"
+	"github.com/keimoon/gore"
 )
 
-var once sync.Once
-
-func newClient(server, password string) *redis.Client {
+func getPool(server, password string) (*gore.Pool, error) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	options := &redis.Options{
-		Network:     "tcp",
-		Addr:        server,
+	pool := &gore.Pool{
+		InitialConn: 1,
+		MaximumConn: 10,
 		Password:    password,
-		DB:          0,
-		PoolSize:    1000,
-		IdleTimeout: 240 * time.Second,
 	}
 
-	return redis.NewClient(options)
+	if err := pool.Dial(server); err != nil {
+		return nil, err
+	}
+
+	return pool, nil
+
 }
 
-func newFailoverClient(master, password string, sentinels []string) *redis.Client {
+func getFailoverPool(master, password string, sentinels ...string) (*gore.Pool, error) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	options := &redis.FailoverOptions{
-		MasterName:    master,
-		SentinelAddrs: sentinels,
-		Password:      password,
-		DB:            0,
-		PoolSize:      1000,
-		IdleTimeout:   240 * time.Second,
+	s := gore.NewSentinel()
+	s.AddServer(sentinels...)
+
+	if err := s.Dial(); err != nil {
+		return nil, err
 	}
 
-	return redis.NewFailoverClient(options)
-}
-
-var cachedClient, cachedFailoverClient *redis.Client
-
-func getClient(redis_host, password string) *redis.Client {
-	once.Do(func() {
-		cachedClient = newClient(redis_host, password)
-	})
-
-	return cachedClient
-}
-
-func getFailoverClient(master, password string, sentinels []string) *redis.Client {
-	once.Do(func() {
-		cachedFailoverClient = newFailoverClient(master, password, sentinels)
-	})
-
-	return cachedFailoverClient
+	return s.GetPoolWithPassword(master, password)
 }
